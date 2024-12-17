@@ -1,4 +1,4 @@
-module github.com/gradientzero/comby-minio-store
+module github.com/gradientzero/comby-store-minio
 
 go 1.22
 

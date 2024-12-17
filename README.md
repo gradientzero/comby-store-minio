@@ -1,4 +1,4 @@
-# comby-minio-store
+# comby-store-minio
 
 Simple implementation of the `DataStore` interface defined in [comby](https://github.com/gradientzero/comby) with MinIO. **comby** is a powerful application framework designed with Event Sourcing and Command Query Responsibility Segregation (CQRS) principles, written in Go.
 
@@ -24,17 +24,17 @@ docker run \
 
 ## Installation
 
-*comby-minio-store* supports the latest version of comby (v2), requires Go version 1.22+ and is based on MinIO client v7.0.0.
+*comby-store-minio* supports the latest version of comby (v2), requires Go version 1.22+ and is based on MinIO client v7.0.0.
 
 ```shell
-go get github.com/gradientzero/comby-minio-store
+go get github.com/gradientzero/comby-store-minio
 ```
 
 ## Quickstart
 
 ```go
 import (
-	"github.com/gradientzero/comby-minio-store"
+	"github.com/gradientzero/comby-store-minio"
 	"github.com/gradientzero/comby/v2"
 )
 

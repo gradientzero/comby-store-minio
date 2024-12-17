@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	store "github.com/gradientzero/comby-minio-store"
+	store "github.com/gradientzero/comby-store-minio"
 	"github.com/gradientzero/comby/v2"
 )
 
