@@ -31,6 +31,7 @@ func NewDataStoreMinio(
 	Secure bool,
 	AccessKeyId string,
 	SecrectAccessKey string,
+	opts ...comby.DataStoreOption,
 ) comby.DataStore {
 	dsm := &dataStoreMinio{
 		Endpoint: Endpoint,
@@ -41,7 +42,11 @@ func NewDataStoreMinio(
 		},
 		dataStoreInfoModel: &comby.DataStoreInfoModel{},
 	}
-
+	for _, opt := range opts {
+		if _, err := opt(&dsm.options); err != nil {
+			return nil
+		}
+	}
 	return dsm
 }
 
