@@ -176,11 +176,11 @@ func (dsm *dataStoreMinio) Copy(ctx context.Context, opts ...comby.DataStoreCopy
 	return nil
 }
 
-func (dsm *dataStoreMinio) List(ctx context.Context, opts ...comby.DataStoreListOption) ([]*comby.DataModel, error) {
+func (dsm *dataStoreMinio) List(ctx context.Context, opts ...comby.DataStoreListOption) ([]*comby.DataModel, int64, error) {
 	listOpts := comby.DataStoreListOptions{}
 	for _, opt := range opts {
 		if _, err := opt(&listOpts); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 	var items []*comby.DataModel
@@ -188,7 +188,7 @@ func (dsm *dataStoreMinio) List(ctx context.Context, opts ...comby.DataStoreList
 		// TODO: navie implementation, should be optimized
 		buckets, err := dsm.minioClient.ListBuckets(ctx)
 		if err != nil {
-			return items, err
+			return items, 0, err
 		}
 		for _, bucket := range buckets {
 
@@ -207,8 +207,8 @@ func (dsm *dataStoreMinio) List(ctx context.Context, opts ...comby.DataStoreList
 			}
 		}
 	}
-
-	return items, nil
+	var total int64 = int64(len(items))
+	return items, total, nil
 }
 
 func (dsm *dataStoreMinio) Delete(ctx context.Context, opts ...comby.DataStoreDeleteOption) error {
