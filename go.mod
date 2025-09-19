@@ -2,10 +2,10 @@ module github.com/gradientzero/comby-store-minio
 
 go 1.22.0
 
-replace github.com/gradientzero/comby/v2 v2.0.0 => /Users/me/Documents/gradient0/repos/comby/comby
+replace github.com/gradientzero/comby/v2 v2.3.2 => /Users/me/Documents/gradient0/repos/comby/comby
 
 require (
-	github.com/gradientzero/comby/v2 v2.0.0
+	github.com/gradientzero/comby/v2 v2.3.2
 	github.com/minio/minio-go/v7 v7.0.32
 )
 

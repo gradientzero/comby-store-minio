@@ -93,7 +93,7 @@ func (dsm *dataStoreMinio) Get(ctx context.Context, opts ...comby.DataStoreGetOp
 
 func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOption) error {
 	setOpts := comby.DataStoreSetOptions{
-		Attributes: comby.NewAttributeMap(),
+		Attributes: comby.NewAttributes(),
 	}
 	for _, opt := range opts {
 		if _, err := opt(&setOpts); err != nil {
@@ -108,7 +108,7 @@ func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOp
 	}
 	if !bucketExists {
 		isBucketPublic := false
-		if _val, ok := setOpts.Attributes.Get("isPublic"); ok {
+		if _val := setOpts.Attributes.Get(comby.DATA_STORE_ATTRIBUTE_IS_PUBLIC); _val != nil {
 			switch val := _val.(type) {
 			case bool:
 				isBucketPublic = val
@@ -147,7 +147,7 @@ func (dsm *dataStoreMinio) Copy(ctx context.Context, opts ...comby.DataStoreCopy
 	}
 	if !bucketExists {
 		isBucketPublic := false
-		if _val, ok := copyOpts.Attributes.Get("isPublic"); ok {
+		if _val := copyOpts.Attributes.Get(comby.DATA_STORE_ATTRIBUTE_IS_PUBLIC); _val != nil {
 			switch val := _val.(type) {
 			case bool:
 				isBucketPublic = val
