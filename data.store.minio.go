@@ -42,7 +42,7 @@ func NewDataStoreMinio(
 		},
 		dataStoreInfoModel: &comby.DataStoreInfoModel{
 			StoreType:      "minio",
-			ConnectionInfo: fmt.Sprintf("minio://%s:***@%s - secure: %t", AccessKeyId, Endpoint, Secure),
+			ConnectionInfo: fmt.Sprintf("%s:***@%s, secure: %t", AccessKeyId, Endpoint, Secure),
 		},
 	}
 	for _, opt := range opts {
@@ -308,11 +308,35 @@ func (dsm *dataStoreMinio) createBucket(ctx context.Context, bucketName string, 
 }
 
 func (dsm *dataStoreMinio) Info(ctx context.Context) (*comby.DataStoreInfoModel, error) {
-	// TODO: implement proper info fetching
-	dsm.dataStoreInfoModel.LastUpdateTime = -1
-	dsm.dataStoreInfoModel.NumBuckets = -1
-	dsm.dataStoreInfoModel.NumObjects = -1
-	dsm.dataStoreInfoModel.TotalSizeInBytes = -1
+
+	// reset
+	dsm.dataStoreInfoModel.LastUpdateTime = 0
+	dsm.dataStoreInfoModel.NumBuckets = 0
+	dsm.dataStoreInfoModel.NumObjects = 0
+	dsm.dataStoreInfoModel.TotalSizeInBytes = 0
+
+	// request info
+	if buckets, err := dsm.minioClient.ListBuckets(ctx); err != nil {
+		return dsm.dataStoreInfoModel, err
+	} else {
+		dsm.dataStoreInfoModel.NumBuckets = int64(len(buckets))
+		for _, bucket := range buckets {
+			objectCh := dsm.minioClient.ListObjects(ctx, bucket.Name, minio.ListObjectsOptions{
+				Recursive: true,
+			})
+			for object := range objectCh {
+				if object.Err != nil {
+					continue
+				} else {
+					dsm.dataStoreInfoModel.NumObjects += 1
+					dsm.dataStoreInfoModel.TotalSizeInBytes += object.Size
+					if object.LastModified.UnixNano() > dsm.dataStoreInfoModel.LastUpdateTime {
+						dsm.dataStoreInfoModel.LastUpdateTime = object.LastModified.UnixNano()
+					}
+				}
+			}
+		}
+	}
 	return dsm.dataStoreInfoModel, nil
 }
 
