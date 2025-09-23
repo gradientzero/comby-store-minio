@@ -40,7 +40,10 @@ func NewDataStoreMinio(
 			Creds:  credentials.NewStaticV4(AccessKeyId, SecrectAccessKey, ""),
 			Secure: Secure,
 		},
-		dataStoreInfoModel: &comby.DataStoreInfoModel{},
+		dataStoreInfoModel: &comby.DataStoreInfoModel{
+			StoreType:      "minio",
+			ConnectionInfo: fmt.Sprintf("minio://%s:***@%s - secure: %t", AccessKeyId, Endpoint, Secure),
+		},
 	}
 	for _, opt := range opts {
 		if _, err := opt(&dsm.options); err != nil {
@@ -305,6 +308,11 @@ func (dsm *dataStoreMinio) createBucket(ctx context.Context, bucketName string, 
 }
 
 func (dsm *dataStoreMinio) Info(ctx context.Context) (*comby.DataStoreInfoModel, error) {
+	// TODO: implement proper info fetching
+	dsm.dataStoreInfoModel.LastUpdateTime = -1
+	dsm.dataStoreInfoModel.NumBuckets = -1
+	dsm.dataStoreInfoModel.NumObjects = -1
+	dsm.dataStoreInfoModel.TotalSizeInBytes = -1
 	return dsm.dataStoreInfoModel, nil
 }
 
