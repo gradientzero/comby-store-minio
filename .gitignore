@@ -17,8 +17,10 @@
 *.cache
 
 # IDE settings
+.claude/
 .idea/
 .vscode/
 
 # Go Modules
 go.sum
+data

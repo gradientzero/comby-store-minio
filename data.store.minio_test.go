@@ -104,3 +104,60 @@ func TestDataStore1(t *testing.T) {
 		t.Fatalf("failed to close connection: %v", err)
 	}
 }
+
+func TestDataStoreWithCryptoService(t *testing.T) {
+	var err error
+	ctx := context.Background()
+
+	// create crypto service with 32-byte key (AES-256)
+	key := []byte("01234567890123456789012345678901")
+	cryptoService, err := comby.NewCryptoService(key)
+	if err != nil {
+		t.Fatalf("failed to create crypto service: %v", err)
+	}
+
+	// setup and init store with crypto service
+	dataStore := store.NewDataStoreMinio("127.0.0.1:9000", false, "ROOTNAME", "CHANGEME123", comby.DataStoreOptionWithCryptoService(cryptoService))
+	if err = dataStore.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// reset database
+	if err := dataStore.Reset(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	testData := []byte("sensitive data that should be encrypted")
+
+	// Set encrypted value
+	if err := dataStore.Set(ctx,
+		comby.DataStoreSetOptionWithBucketName("encrypted-bucket"),
+		comby.DataStoreSetOptionWithObjectName("encrypted-object"),
+		comby.DataStoreSetOptionWithContentType("text/plain"),
+		comby.DataStoreSetOptionWithData(testData),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get and decrypt value
+	if dataModel, err := dataStore.Get(ctx,
+		comby.DataStoreGetOptionWithBucketName("encrypted-bucket"),
+		comby.DataStoreGetOptionWithObjectName("encrypted-object"),
+	); err != nil {
+		t.Fatal(err)
+	} else {
+		if string(dataModel.Data) != string(testData) {
+			t.Fatalf("decrypted data mismatch: got %q, want %q", string(dataModel.Data), string(testData))
+		}
+	}
+
+	// reset database
+	if err := dataStore.Reset(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// close connection
+	if err := dataStore.Close(ctx); err != nil {
+		t.Fatalf("failed to close connection: %v", err)
+	}
+}

@@ -85,11 +85,23 @@ func (dsm *dataStoreMinio) Get(ctx context.Context, opts ...comby.DataStoreGetOp
 		if err != nil {
 			return nil, err
 		}
-		return &comby.DataModel{
+
+		result := &comby.DataModel{
 			BucketName: getOpts.BucketName,
 			ObjectName: getOpts.ObjectName,
 			Data:       bytes,
-		}, nil
+		}
+
+		// decrypt data if crypto service is provided
+		if dsm.options.CryptoService != nil && len(result.Data) > 0 {
+			decryptedData, err := dsm.options.CryptoService.Decrypt(result.Data)
+			if err != nil {
+				return result, fmt.Errorf("'%s' failed to decrypt data: %w", dsm.String(), err)
+			}
+			result.Data = decryptedData
+		}
+
+		return result, nil
 	}
 	return nil, fmt.Errorf("object invalid")
 }
@@ -122,9 +134,21 @@ func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOp
 			return err
 		}
 	}
+
+	data := setOpts.Data
+
+	// encrypt data if crypto service is provided
+	if dsm.options.CryptoService != nil {
+		encryptedData, err := dsm.options.CryptoService.Encrypt(data)
+		if err != nil {
+			return fmt.Errorf("'%s' failed to encrypt data: %w", dsm.String(), err)
+		}
+		data = encryptedData
+	}
+
 	// convert byte slice to io.Reader
-	reader := bytes.NewReader(setOpts.Data)
-	objectSize := int64(len(setOpts.Data))
+	reader := bytes.NewReader(data)
+	objectSize := int64(len(data))
 	opts2 := minio.PutObjectOptions{
 		ContentType: setOpts.ContentType,
 	}
