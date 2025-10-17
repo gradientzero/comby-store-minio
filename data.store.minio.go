@@ -30,14 +30,14 @@ func NewDataStoreMinio(
 	Endpoint string,
 	Secure bool,
 	AccessKeyId string,
-	SecrectAccessKey string,
+	SecretAccessKey string,
 	opts ...comby.DataStoreOption,
 ) comby.DataStore {
 	dsm := &dataStoreMinio{
 		Endpoint: Endpoint,
 		options:  comby.DataStoreOptions{},
 		minioOptions: &minio.Options{
-			Creds:  credentials.NewStaticV4(AccessKeyId, SecrectAccessKey, ""),
+			Creds:  credentials.NewStaticV4(AccessKeyId, SecretAccessKey, ""),
 			Secure: Secure,
 		},
 		dataStoreInfoModel: &comby.DataStoreInfoModel{
@@ -80,30 +80,28 @@ func (dsm *dataStoreMinio) Get(ctx context.Context, opts ...comby.DataStoreGetOp
 	if err != nil {
 		return nil, err
 	}
-	if minioObject != nil {
-		bytes, err := io.ReadAll(minioObject)
-		if err != nil {
-			return nil, err
-		}
 
-		result := &comby.DataModel{
-			BucketName: getOpts.BucketName,
-			ObjectName: getOpts.ObjectName,
-			Data:       bytes,
-		}
-
-		// decrypt data if crypto service is provided
-		if dsm.options.CryptoService != nil && len(result.Data) > 0 {
-			decryptedData, err := dsm.options.CryptoService.Decrypt(result.Data)
-			if err != nil {
-				return result, fmt.Errorf("'%s' failed to decrypt data: %w", dsm.String(), err)
-			}
-			result.Data = decryptedData
-		}
-
-		return result, nil
+	bytes, err := io.ReadAll(minioObject)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("object invalid")
+
+	result := &comby.DataModel{
+		BucketName: getOpts.BucketName,
+		ObjectName: getOpts.ObjectName,
+		Data:       bytes,
+	}
+
+	// decrypt data if crypto service is provided
+	if dsm.options.CryptoService != nil && len(result.Data) > 0 {
+		decryptedData, err := dsm.options.CryptoService.Decrypt(result.Data)
+		if err != nil {
+			return result, fmt.Errorf("'%s' failed to decrypt data: %w", dsm.String(), err)
+		}
+		result.Data = decryptedData
+	}
+
+	return result, nil
 }
 
 func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOption) error {
@@ -160,7 +158,9 @@ func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOp
 }
 
 func (dsm *dataStoreMinio) Copy(ctx context.Context, opts ...comby.DataStoreCopyOption) error {
-	copyOpts := comby.DataStoreCopyOptions{}
+	copyOpts := comby.DataStoreCopyOptions{
+		Attributes: comby.NewAttributes(),
+	}
 	for _, opt := range opts {
 		if _, err := opt(&copyOpts); err != nil {
 			return err
@@ -212,7 +212,7 @@ func (dsm *dataStoreMinio) List(ctx context.Context, opts ...comby.DataStoreList
 	}
 	var items []*comby.DataModel
 	if dsm.minioClient != nil {
-		// TODO: navie implementation, should be optimized
+		// TODO: naive implementation, should be optimized
 		buckets, err := dsm.minioClient.ListBuckets(ctx)
 		if err != nil {
 			return items, 0, err
@@ -224,13 +224,12 @@ func (dsm *dataStoreMinio) List(ctx context.Context, opts ...comby.DataStoreList
 			})
 			for object := range objectCh {
 				if object.Err != nil {
-					// nothing)
-				} else {
-					items = append(items, &comby.DataModel{
-						BucketName: bucket.Name,
-						ObjectName: object.Key,
-					})
+					return items, int64(len(items)), fmt.Errorf("failed to list objects in bucket %s: %w", bucket.Name, object.Err)
 				}
+				items = append(items, &comby.DataModel{
+					BucketName: bucket.Name,
+					ObjectName: object.Key,
+				})
 			}
 		}
 	}
@@ -252,7 +251,7 @@ func (dsm *dataStoreMinio) Delete(ctx context.Context, opts ...comby.DataStoreDe
 func (dsm *dataStoreMinio) Total(ctx context.Context) int64 {
 	total := int64(0)
 	if dsm.minioClient != nil {
-		// TODO: navie implementation, should be optimized
+		// TODO: naive implementation, should be optimized
 		buckets, err := dsm.minioClient.ListBuckets(ctx)
 		if err != nil {
 			return 0
@@ -264,10 +263,10 @@ func (dsm *dataStoreMinio) Total(ctx context.Context) int64 {
 			})
 			for object := range objectCh {
 				if object.Err != nil {
-					// nothing)
-				} else {
-					total += 1
+					// Error occurred, but continue counting other objects
+					continue
 				}
+				total += 1
 			}
 		}
 	}
@@ -275,9 +274,7 @@ func (dsm *dataStoreMinio) Total(ctx context.Context) int64 {
 }
 
 func (dsm *dataStoreMinio) Close(ctx context.Context) error {
-	if dsm.minioClient != nil {
-		// TODO: check if close is required at all here
-	}
+	// Minio client doesn't require explicit close
 	return nil
 }
 
@@ -366,23 +363,39 @@ func (dsm *dataStoreMinio) Info(ctx context.Context) (*comby.DataStoreInfoModel,
 
 func (dsm *dataStoreMinio) Reset(ctx context.Context) error {
 	if dsm.minioClient != nil {
-		if buckets, err := dsm.minioClient.ListBuckets(ctx); err != nil {
+		buckets, err := dsm.minioClient.ListBuckets(ctx)
+		if err != nil {
 			return err
-		} else {
-			for _, bucket := range buckets {
-				objectCh := dsm.minioClient.ListObjects(ctx, bucket.Name, minio.ListObjectsOptions{
-					Recursive: true,
-				})
-				for object := range objectCh {
-					if object.Err != nil {
-						continue
-					} else {
-						if err := dsm.minioClient.RemoveObject(ctx, bucket.Name, object.Key, minio.RemoveObjectOptions{}); err != nil {
-							return err
-						}
-					}
+		}
+
+		var errs []error
+		for _, bucket := range buckets {
+			// First, remove all objects and their versions in the bucket
+			objectCh := dsm.minioClient.ListObjects(ctx, bucket.Name, minio.ListObjectsOptions{
+				Recursive:    true,
+				WithVersions: true,
+			})
+			for object := range objectCh {
+				if object.Err != nil {
+					errs = append(errs, fmt.Errorf("failed to list object in bucket %s: %w", bucket.Name, object.Err))
+					continue
+				}
+				removeOpts := minio.RemoveObjectOptions{
+					VersionID: object.VersionID,
+				}
+				if err := dsm.minioClient.RemoveObject(ctx, bucket.Name, object.Key, removeOpts); err != nil {
+					errs = append(errs, fmt.Errorf("failed to remove object %s/%s: %w", bucket.Name, object.Key, err))
 				}
 			}
+
+			// Then, remove the bucket itself
+			if err := dsm.minioClient.RemoveBucket(ctx, bucket.Name); err != nil {
+				errs = append(errs, fmt.Errorf("failed to remove bucket %s: %w", bucket.Name, err))
+			}
+		}
+
+		if len(errs) > 0 {
+			return fmt.Errorf("reset completed with %d errors: %v", len(errs), errs[0])
 		}
 	}
 	return nil

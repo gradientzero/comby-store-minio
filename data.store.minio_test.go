@@ -161,3 +161,161 @@ func TestDataStoreWithCryptoService(t *testing.T) {
 		t.Fatalf("failed to close connection: %v", err)
 	}
 }
+
+func TestDataStoreCopy(t *testing.T) {
+	var err error
+	ctx := context.Background()
+
+	// setup and init store
+	dataStore := store.NewDataStoreMinio("127.0.0.1:9000", false, "ROOTNAME", "CHANGEME123")
+	if err = dataStore.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// reset database
+	if err := dataStore.Reset(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set source value
+	sourceData := []byte("data to copy")
+	if err := dataStore.Set(ctx,
+		comby.DataStoreSetOptionWithBucketName("source-bucket"),
+		comby.DataStoreSetOptionWithObjectName("source-object"),
+		comby.DataStoreSetOptionWithContentType("text/plain"),
+		comby.DataStoreSetOptionWithData(sourceData),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Copy to destination
+	if err := dataStore.Copy(ctx,
+		comby.DataStoreCopyOptionWithSrcBucketName("source-bucket"),
+		comby.DataStoreCopyOptionWithSrcObjectName("source-object"),
+		comby.DataStoreCopyOptionWithDstBucketName("dest-bucket"),
+		comby.DataStoreCopyOptionWithDstObjectName("dest-object"),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify destination has the data
+	if dataModel, err := dataStore.Get(ctx,
+		comby.DataStoreGetOptionWithBucketName("dest-bucket"),
+		comby.DataStoreGetOptionWithObjectName("dest-object"),
+	); err != nil {
+		t.Fatal(err)
+	} else {
+		if string(dataModel.Data) != string(sourceData) {
+			t.Fatalf("copied data mismatch: got %q, want %q", string(dataModel.Data), string(sourceData))
+		}
+	}
+
+	// Verify source still exists
+	if dataModel, err := dataStore.Get(ctx,
+		comby.DataStoreGetOptionWithBucketName("source-bucket"),
+		comby.DataStoreGetOptionWithObjectName("source-object"),
+	); err != nil {
+		t.Fatal(err)
+	} else {
+		if string(dataModel.Data) != string(sourceData) {
+			t.Fatalf("source data mismatch: got %q, want %q", string(dataModel.Data), string(sourceData))
+		}
+	}
+
+	// check totals
+	if dataStore.Total(ctx) != 2 {
+		t.Fatalf("wrong total after copy: %d", dataStore.Total(ctx))
+	}
+
+	// reset database
+	if err := dataStore.Reset(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// close connection
+	if err := dataStore.Close(ctx); err != nil {
+		t.Fatalf("failed to close connection: %v", err)
+	}
+}
+
+func TestDataStoreInfo(t *testing.T) {
+	var err error
+	ctx := context.Background()
+
+	// setup and init store
+	dataStore := store.NewDataStoreMinio("127.0.0.1:9000", false, "ROOTNAME", "CHANGEME123")
+	if err = dataStore.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// reset database
+	if err := dataStore.Reset(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get info on empty store
+	if info, err := dataStore.Info(ctx); err != nil {
+		t.Fatal(err)
+	} else {
+		if info.StoreType != "minio" {
+			t.Fatalf("wrong store type: %q", info.StoreType)
+		}
+		if info.NumBuckets != 0 {
+			t.Fatalf("wrong num buckets (empty): %d", info.NumBuckets)
+		}
+		if info.NumObjects != 0 {
+			t.Fatalf("wrong num objects (empty): %d", info.NumObjects)
+		}
+		if info.TotalSizeInBytes != 0 {
+			t.Fatalf("wrong total size (empty): %d", info.TotalSizeInBytes)
+		}
+	}
+
+	// Add some data
+	testData1 := []byte("test data 1")
+	testData2 := []byte("test data 2 - longer")
+	if err := dataStore.Set(ctx,
+		comby.DataStoreSetOptionWithBucketName("info-bucket1"),
+		comby.DataStoreSetOptionWithObjectName("object1"),
+		comby.DataStoreSetOptionWithContentType("text/plain"),
+		comby.DataStoreSetOptionWithData(testData1),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := dataStore.Set(ctx,
+		comby.DataStoreSetOptionWithBucketName("info-bucket2"),
+		comby.DataStoreSetOptionWithObjectName("object2"),
+		comby.DataStoreSetOptionWithContentType("text/plain"),
+		comby.DataStoreSetOptionWithData(testData2),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get info on populated store
+	if info, err := dataStore.Info(ctx); err != nil {
+		t.Fatal(err)
+	} else {
+		if info.NumBuckets != 2 {
+			t.Fatalf("wrong num buckets: %d", info.NumBuckets)
+		}
+		if info.NumObjects != 2 {
+			t.Fatalf("wrong num objects: %d", info.NumObjects)
+		}
+		if info.TotalSizeInBytes != int64(len(testData1)+len(testData2)) {
+			t.Fatalf("wrong total size: got %d, want %d", info.TotalSizeInBytes, len(testData1)+len(testData2))
+		}
+		if info.LastUpdateTime == 0 {
+			t.Fatal("last update time should not be 0")
+		}
+	}
+
+	// reset database
+	if err := dataStore.Reset(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// close connection
+	if err := dataStore.Close(ctx); err != nil {
+		t.Fatalf("failed to close connection: %v", err)
+	}
+}
