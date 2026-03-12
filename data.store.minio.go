@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/gradientzero/comby/v2"
 	"github.com/minio/minio-go/v7"
@@ -80,6 +81,7 @@ func (dsm *dataStoreMinio) Get(ctx context.Context, opts ...comby.DataStoreGetOp
 	if err != nil {
 		return nil, err
 	}
+	defer minioObject.Close()
 
 	bytes, err := io.ReadAll(minioObject)
 	if err != nil {
@@ -263,7 +265,7 @@ func (dsm *dataStoreMinio) Total(ctx context.Context) int64 {
 			})
 			for object := range objectCh {
 				if object.Err != nil {
-					// Error occurred, but continue counting other objects
+					slog.Warn("minio total: skipping object with error", "bucket", bucket.Name, "err", object.Err)
 					continue
 				}
 				total += 1
@@ -283,7 +285,7 @@ func (dsm *dataStoreMinio) Options() comby.DataStoreOptions {
 }
 
 func (dsm *dataStoreMinio) String() string {
-	return fmt.Sprintf("minio://%s", dsm.Endpoint)
+	return "minio://" + dsm.Endpoint
 }
 
 func (dsm *dataStoreMinio) createBucket(ctx context.Context, bucketName string, public bool, makeBucketOptions minio.MakeBucketOptions) error {
@@ -337,24 +339,24 @@ func (dsm *dataStoreMinio) Info(ctx context.Context) (*comby.DataStoreInfoModel,
 	dsm.dataStoreInfoModel.TotalSizeInBytes = 0
 
 	// request info
-	if buckets, err := dsm.minioClient.ListBuckets(ctx); err != nil {
+	buckets, err := dsm.minioClient.ListBuckets(ctx)
+	if err != nil {
 		return dsm.dataStoreInfoModel, err
-	} else {
-		dsm.dataStoreInfoModel.NumBuckets = int64(len(buckets))
-		for _, bucket := range buckets {
-			objectCh := dsm.minioClient.ListObjects(ctx, bucket.Name, minio.ListObjectsOptions{
-				Recursive: true,
-			})
-			for object := range objectCh {
-				if object.Err != nil {
-					continue
-				} else {
-					dsm.dataStoreInfoModel.NumObjects += 1
-					dsm.dataStoreInfoModel.TotalSizeInBytes += object.Size
-					if object.LastModified.UnixNano() > dsm.dataStoreInfoModel.LastUpdateTime {
-						dsm.dataStoreInfoModel.LastUpdateTime = object.LastModified.UnixNano()
-					}
-				}
+	}
+	dsm.dataStoreInfoModel.NumBuckets = int64(len(buckets))
+	for _, bucket := range buckets {
+		objectCh := dsm.minioClient.ListObjects(ctx, bucket.Name, minio.ListObjectsOptions{
+			Recursive: true,
+		})
+		for object := range objectCh {
+			if object.Err != nil {
+				slog.Warn("minio info: skipping object with error", "bucket", bucket.Name, "err", object.Err)
+				continue
+			}
+			dsm.dataStoreInfoModel.NumObjects += 1
+			dsm.dataStoreInfoModel.TotalSizeInBytes += object.Size
+			if object.LastModified.UnixNano() > dsm.dataStoreInfoModel.LastUpdateTime {
+				dsm.dataStoreInfoModel.LastUpdateTime = object.LastModified.UnixNano()
 			}
 		}
 	}
@@ -395,7 +397,7 @@ func (dsm *dataStoreMinio) Reset(ctx context.Context) error {
 		}
 
 		if len(errs) > 0 {
-			return fmt.Errorf("reset completed with %d errors: %v", len(errs), errs[0])
+			return fmt.Errorf("reset completed with %d errors: %v", len(errs), errs)
 		}
 	}
 	return nil

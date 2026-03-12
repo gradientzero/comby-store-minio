@@ -76,6 +76,8 @@ func TestDataStore1(t *testing.T) {
 
 	// List all keys
 	if dataModels, _, err := dataStore.List(ctx); err != nil {
+		t.Fatal(err)
+	} else {
 		if len(dataModels) != 2 {
 			t.Fatalf("wrong number of keys: %d", len(dataModels))
 		}
