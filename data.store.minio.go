@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"time"
 
 	"github.com/gradientzero/comby/v2"
 	"github.com/minio/minio-go/v7"
@@ -61,6 +63,26 @@ func (dsm *dataStoreMinio) Init(ctx context.Context, opts ...comby.DataStoreOpti
 			return err
 		}
 	}
+
+	// Configure HTTP transport with pool settings from options.
+	maxIdleConns := 20
+	if dsm.options.MaxIdleConns > 0 {
+		maxIdleConns = dsm.options.MaxIdleConns
+	}
+	maxIdleConnsPerHost := 10
+	if dsm.options.MaxIdleConnsPerHost > 0 {
+		maxIdleConnsPerHost = dsm.options.MaxIdleConnsPerHost
+	}
+	idleConnTimeout := 90 * time.Second
+	if dsm.options.IdleConnTimeout > 0 {
+		idleConnTimeout = dsm.options.IdleConnTimeout
+	}
+	dsm.minioOptions.Transport = &http.Transport{
+		MaxIdleConns:        maxIdleConns,
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+		IdleConnTimeout:     idleConnTimeout,
+	}
+
 	var err error
 	dsm.minioClient, err = minio.New(dsm.Endpoint, dsm.minioOptions)
 	return err
