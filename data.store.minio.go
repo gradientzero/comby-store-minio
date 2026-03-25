@@ -139,9 +139,13 @@ func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOp
 	}
 	var err error
 	// ensure bucket exists
+	// Note: some S3-compatible providers (e.g., Hetzner Object Storage) return
+	// unexpected errors like NoSuchKey instead of a clean 404 for non-existent
+	// buckets. We treat any BucketExists error as "bucket does not exist" and
+	// attempt to create it.
 	bucketExists, err := dsm.minioClient.BucketExists(ctx, setOpts.BucketName)
 	if err != nil {
-		return err
+		bucketExists = false
 	}
 	if !bucketExists {
 		isBucketPublic := false
@@ -151,9 +155,13 @@ func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOp
 				isBucketPublic = val
 			}
 		}
-		makeBucketOptions := minio.MakeBucketOptions{Region: "us-east-1", ObjectLocking: true}
+		makeBucketOptions := minio.MakeBucketOptions{
+			Region:        dsm.options.BucketRegion,
+			ObjectLocking: dsm.options.BucketObjectLocking,
+		}
 		if err = dsm.createBucket(ctx, setOpts.BucketName, isBucketPublic, makeBucketOptions); err != nil {
-			return err
+			return fmt.Errorf("MakeBucket(%s, region=%q, objectLocking=%t): %w",
+				setOpts.BucketName, dsm.options.BucketRegion, dsm.options.BucketObjectLocking, err)
 		}
 	}
 
@@ -176,7 +184,7 @@ func (dsm *dataStoreMinio) Set(ctx context.Context, opts ...comby.DataStoreSetOp
 	}
 	_, err = dsm.minioClient.PutObject(ctx, setOpts.BucketName, setOpts.ObjectName, reader, objectSize, opts2)
 	if err != nil {
-		return err
+		return fmt.Errorf("PutObject(%s/%s, size=%d): %w", setOpts.BucketName, setOpts.ObjectName, objectSize, err)
 	}
 	return nil
 }
@@ -191,10 +199,10 @@ func (dsm *dataStoreMinio) Copy(ctx context.Context, opts ...comby.DataStoreCopy
 		}
 	}
 	var err error
-	// ensure destination bucket exists
+	// ensure destination bucket exists (see Set() for rationale on error handling)
 	bucketExists, err := dsm.minioClient.BucketExists(ctx, copyOpts.DstBucketName)
 	if err != nil {
-		return err
+		bucketExists = false
 	}
 	if !bucketExists {
 		isBucketPublic := false
@@ -204,7 +212,10 @@ func (dsm *dataStoreMinio) Copy(ctx context.Context, opts ...comby.DataStoreCopy
 				isBucketPublic = val
 			}
 		}
-		makeBucketOptions := minio.MakeBucketOptions{Region: "us-east-1", ObjectLocking: true}
+		makeBucketOptions := minio.MakeBucketOptions{
+			Region:        dsm.options.BucketRegion,
+			ObjectLocking: dsm.options.BucketObjectLocking,
+		}
 		if err = dsm.createBucket(ctx, copyOpts.DstBucketName, isBucketPublic, makeBucketOptions); err != nil {
 			return err
 		}
