@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gradientzero/comby/v2"
+	"github.com/gradientzero/comby/v3"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
