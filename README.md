@@ -24,7 +24,7 @@ docker run \
 
 ## Installation
 
-*comby-store-minio* supports the latest version of comby (v2), requires Go version 1.22+ and is based on MinIO client v7.0.0.
+*comby-store-minio* supports the latest version of comby (v3), requires Go version 1.22+ and is based on MinIO client v7.0.0.
 
 ```shell
 go get github.com/gradientzero/comby-store-minio
@@ -35,7 +35,7 @@ go get github.com/gradientzero/comby-store-minio
 ```go
 import (
 	"github.com/gradientzero/comby-store-minio"
-	"github.com/gradientzero/comby/v2"
+	"github.com/gradientzero/comby/v3"
 )
 
 // create redis DataStore
