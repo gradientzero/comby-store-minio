@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	store "github.com/gradientzero/comby-store-minio"
-	"github.com/gradientzero/comby/v2"
+	"github.com/gradientzero/comby/v3"
 )
 
 func TestDataStore1(t *testing.T) {
